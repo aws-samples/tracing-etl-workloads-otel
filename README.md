@@ -1,4 +1,4 @@
-# OpenTelemetry Data Processing Solution
+# Tracing AWS Glue Jobs using AWS Distro for OpenTelemetry
 
 ## Overview
 
