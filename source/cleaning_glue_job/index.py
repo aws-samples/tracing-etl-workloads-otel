@@ -4,6 +4,8 @@ import importlib.util
 import boto3
 import pandas as pd
 import numpy as np
+import time
+import random
 
 from awsglue.utils import getResolvedOptions
 
@@ -14,12 +16,26 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.propagators.aws import AwsXRayPropagator
+from opentelemetry.instrumentation.botocore import BotocoreInstrumentor
+
+# Check for FUZZY_FOR_DEMO environment variable
+FUZZY_FOR_DEMO = os.environ.get('FUZZY_FOR_DEMO', 'false').lower() == 'true'
+
+def fuzzy_delay():
+    if FUZZY_FOR_DEMO:
+        delay = random.uniform(1, 5)
+        time.sleep(delay)
+
+def mock_s3_failure():
+    if FUZZY_FOR_DEMO and random.random() < 0.1:  # 10% chance of failure
+        raise Exception("Mocked S3 operation failure")
 
 def load_xray_helper(XRAY_HELPER_KEY):
     """
     Load the X-Ray Helper Module dynamically.
     """
     print("Loading X-Ray Helper Module")
+    fuzzy_delay()
     xray_helper_dir = next(d for d in sys.path if d.startswith('/tmp/glue-python-libs-'))
     xray_helper_path = os.path.join(xray_helper_dir, f'{XRAY_HELPER_KEY}.py')
     spec = importlib.util.spec_from_file_location("xray_helper", xray_helper_path)
@@ -31,6 +47,7 @@ def get_job_parameters():
     """
     Get job parameters from the Glue job.
     """
+    fuzzy_delay()
     args = getResolvedOptions(sys.argv, [
         'job_name', 'bucket_name', 'object_key', 
         'otlp_endpoint', 'trace_id', 'xray_helper_key'
@@ -41,6 +58,7 @@ def setup_tracing(job_name, trace_id, otlp_endpoint, xray_trace):
     """
     Set up OpenTelemetry tracing.
     """
+    fuzzy_delay()
     # Retrieve parent segment from X-Ray
     parent_id = xray_trace.retrieve_id(job_name)
     
@@ -66,28 +84,46 @@ def setup_tracing(job_name, trace_id, otlp_endpoint, xray_trace):
     resource = Resource.create(attributes=resource_attributes)
 
     # Configure global tracer provider
-    trace.set_tracer_provider(TracerProvider(active_span_processor=span_processor, resource=resource))
+    trace_provider = TracerProvider(active_span_processor=span_processor, resource=resource)
+    trace.set_tracer_provider(trace_provider)
+
+    # Setup Auto Instrumentation
+    BotocoreInstrumentor().instrument(
+        trace_provider = trace_provider
+    )
     
     return trace.get_tracer(__name__), context
 
 def read_data_from_s3(s3_path, tracer):
     """
-    Read data from S3 using boto3.
+    Read data from S3 using boto3 with simple retry logic.
     """
     with tracer.start_as_current_span("Read Data from S3", attributes={'S3Path': s3_path}):
-        bucket_name, object_key = s3_path.replace("s3://", "").split("/", 1)
-        s3 = boto3.client('s3')
-        obj = s3.get_object(Bucket=bucket_name, Key=object_key)
-        df = pd.read_csv(obj['Body'])
-        print("Data schema:")
-        print(df.dtypes)
-    return df, s3
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                fuzzy_delay()
+                mock_s3_failure()
+                bucket_name, object_key = s3_path.replace("s3://", "").split("/", 1)
+                s3 = boto3.client('s3')
+                obj = s3.get_object(Bucket=bucket_name, Key=object_key)
+                df = pd.read_csv(obj['Body'])
+                print(f"Data read successfully on attempt {attempt + 1}")
+                print("Data schema:")
+                print(df.dtypes)
+                return df, s3
+            except Exception as e:
+                print(f"Attempt {attempt + 1} failed: {str(e)}")
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(2 ** attempt)  # Exponential backoff
 
 def drop_columns(df, col_list, tracer):
     """
     Drop specified columns from the DataFrame.
     """
     with tracer.start_as_current_span("Drop Columns"):
+        fuzzy_delay()
         print(f"Dropping columns: {col_list}")
         df = df.drop(columns=col_list)
     return df
@@ -97,6 +133,7 @@ def convert_currency(df, col_nm, tracer):
     Convert currency column to float and drop NaN values.
     """
     with tracer.start_as_current_span("Convert Currency", attributes={'column': col_nm}):
+        fuzzy_delay()
         print(f"Converting currency for column: {col_nm}")
         df[col_nm] = df[col_nm].str.replace('[$,]', '', regex=True).astype(float)
         df = df.dropna(subset=[col_nm])
@@ -107,6 +144,7 @@ def fix_skewness(df, col_name, tracer):
     Fix skewness in the specified column using square root transformation.
     """
     with tracer.start_as_current_span("Fix Skewness", attributes={'column': col_name}):
+        fuzzy_delay()
         print(f"Fixing skewness for column: {col_name}")
         df[col_name] = df[col_name].astype(float)
         median_value = df[col_name].median()
@@ -120,6 +158,7 @@ def correct_review_dates(df, col_nm, tracer):
     Correct review dates in the specified column.
     """
     with tracer.start_as_current_span("Correct Review Dates", attributes={'column': col_nm}):
+        fuzzy_delay()
         print(f"Correcting review dates for column: {col_nm}")
         
         # Convert to datetime, coercing errors to NaT
@@ -155,6 +194,7 @@ def process_data(df, tracer):
     Main data processing function.
     """
     with tracer.start_as_current_span("Data Processing"):
+        fuzzy_delay()
         # Standardizing column names
         df.columns = [x.lower().replace(' ', '_') for x in df.columns]
         print("Standardized column names:", df.columns)
@@ -222,16 +262,27 @@ def process_data(df, tracer):
 
 def write_data_to_s3(df, bucket_name, s3, tracer):
     """
-    Write processed data to S3 as a Parquet file.
+    Write processed data to S3 as a Parquet file with simple retry logic.
     """
     output_s3_path = f"s3://{bucket_name}/cleaned/output.parquet"
     print(f"Writing processed data to S3: {output_s3_path}")
     with tracer.start_as_current_span("Write Data to S3", attributes={'S3Path': output_s3_path}):
-        buffer = df.to_parquet()
-        s3.put_object(Bucket=bucket_name, Key='cleaned/output.parquet', Body=buffer)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                fuzzy_delay()
+                mock_s3_failure()
+                buffer = df.to_parquet()
+                s3.put_object(Bucket=bucket_name, Key='cleaned/output.parquet', Body=buffer)
+                print(f"Data written successfully on attempt {attempt + 1}")
+                return
+            except Exception as e:
+                print(f"Attempt {attempt + 1} failed: {str(e)}")
+                if attempt == max_retries - 1:
+                    raise
+                time.sleep(2 ** attempt)  # Exponential backoff
 
 def main():
-
     # Get job parameters
     args = get_job_parameters()
     JOB_NAME = args['job_name']

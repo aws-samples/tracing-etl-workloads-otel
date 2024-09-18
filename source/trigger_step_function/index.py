@@ -1,15 +1,30 @@
 import json
 import boto3
 import os
+import time
+import random
 from typing import Dict
 
 # Create Boto3 clients (reusable across multiple invocations)
 s3_client = boto3.client('s3')
 stepfunctions_client = boto3.client('stepfunctions')
 
+# Check for FUZZY_FOR_DEMO environment variable
+FUZZY_FOR_DEMO = os.environ.get('FUZZY_FOR_DEMO', 'false').lower() == 'true'
+
+def fuzzy_delay():
+    if FUZZY_FOR_DEMO:
+        delay = random.uniform(1, 5)
+        time.sleep(delay)
+
+def mock_s3_failure():
+    if FUZZY_FOR_DEMO and random.random() < 0.1:  # 10% chance of failure
+        raise Exception("Mocked S3 operation failure")
+
 def lambda_handler(event, context):
     try:
         print(json.dumps(event))
+        fuzzy_delay()
 
         # Validate the incoming event
         if 'Records' not in event or not event['Records']:
@@ -26,12 +41,15 @@ def lambda_handler(event, context):
 
         print(f"S3 Event - Bucket: {bucket_name}, Object Key: {object_key}")
 
+        # Simulate S3 operation failure
+        mock_s3_failure()
+
         # Prepare input payload for Step Function
         trace_id = os.environ.get("_X_AMZN_TRACE_ID")
         if trace_id:
             trace_id = trace_id.split(";")[0].split("=")[1]
         else:
-            logger.warning("_X_AMZN_TRACE_ID environment variable not found. Skipping trace ID in input payload.")
+            print("_X_AMZN_TRACE_ID environment variable not found. Skipping trace ID in input payload.")
 
         input_payload: Dict[str, str] = {
             'bucket_name': bucket_name,
@@ -48,6 +66,8 @@ def lambda_handler(event, context):
                 'statusCode': 500,
                 'body': 'Internal server error'
             }
+
+        fuzzy_delay()
 
         # Invoke Step Function
         response = stepfunctions_client.start_execution(
