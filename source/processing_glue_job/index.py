@@ -97,7 +97,7 @@ def read_data_from_s3(bucket_name, tracer):
     """
     Read data from S3 using boto3 with simple retry logic.
     """
-    with tracer.start_as_current_span("Read from S3", attributes={'bucket': bucket_name, 'operation': 'read_parquet'}):
+    with tracer.start_as_current_span("Read from S3", attributes={'bucket': bucket_name, 'operation': 'read_parquet'}) as span:
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -112,9 +112,9 @@ def read_data_from_s3(bucket_name, tracer):
                 
                 print(f"Data read successfully on attempt {attempt + 1}")
                 # Add metadata about the read operation
-                tracer.set_attribute('input_path', input_path)
-                tracer.set_attribute('row_count', len(df))
-                tracer.set_attribute('column_count', len(df.columns))
+                span.set_attribute('input_path', input_path)
+                span.set_attribute('row_count', len(df))
+                span.set_attribute('column_count', len(df.columns))
                 
                 print(f"Created DataFrame with {len(df)} rows and {len(df.columns)} columns")
                 return df, s3
@@ -128,7 +128,7 @@ def process_data(df, tracer):
     """
     Process the data with various calculations and rankings.
     """
-    with tracer.start_as_current_span("Data Processing", attributes={'input_rows': len(df)}):
+    with tracer.start_as_current_span("Data Processing", attributes={'input_rows': len(df)}) as span:
         with tracer.start_as_current_span("Calculate Minimum Total Spend", attributes={'operation': 'minimum_total_spend'}):
             fuzzy_delay()
             print("Calculating minimum total spend")
@@ -166,8 +166,8 @@ def process_data(df, tracer):
             df['prop_rank_exp'] = df['exp_rank_overall'].astype(str) + '/' + str(total_no_props)
             df['prop_rank_review'] = df['rank_overall_reviews'].astype(str) + '/' + str(total_no_props)
         
-        tracer.set_attribute('output_rows', len(df))
-        tracer.set_attribute('output_columns', len(df.columns))
+        span.set_attribute('output_rows', len(df))
+        span.set_attribute('output_columns', len(df.columns))
     
     return df
 
@@ -175,7 +175,7 @@ def write_data_to_s3(df, bucket_name, s3, tracer):
     """
     Write processed data to S3 as a Parquet file with simple retry logic.
     """
-    with tracer.start_as_current_span("Write to S3", attributes={'bucket': bucket_name, 'operation': 'write_parquet'}):
+    with tracer.start_as_current_span("Write to S3", attributes={'bucket': bucket_name, 'operation': 'write_parquet'}) as span:
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -186,9 +186,9 @@ def write_data_to_s3(df, bucket_name, s3, tracer):
                 s3.put_object(Bucket=bucket_name, Key='processed/output.parquet', Body=buffer)
                 
                 print(f"Data written successfully on attempt {attempt + 1}")
-                tracer.set_attribute('output_path', output_path)
-                tracer.set_attribute('output_rows', len(df))
-                tracer.set_attribute('output_columns', len(df.columns))
+                span.set_attribute('output_path', output_path)
+                span.set_attribute('output_rows', len(df))
+                span.set_attribute('output_columns', len(df.columns))
                 return
             except Exception as e:
                 print(f"Attempt {attempt + 1} failed: {str(e)}")
