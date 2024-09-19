@@ -22,10 +22,8 @@ class RemovalPolicyAspect:
         if hasattr(node, "apply_removal_policy"):
             try:
                 node.apply_removal_policy(RemovalPolicy.DESTROY)
-            except Exception:
-                # If applying the removal policy fails for any reason, we just skip it
+            except Exception:  # nosec B110
                 pass
-
 
 class OtelSolutionStack(Stack):
 

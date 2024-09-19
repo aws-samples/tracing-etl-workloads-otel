@@ -14,12 +14,8 @@ FUZZY_FOR_DEMO = os.environ.get('FUZZY_FOR_DEMO', 'false').lower() == 'true'
 
 def fuzzy_delay():
     if FUZZY_FOR_DEMO:
-        delay = random.uniform(1, 5)
+        delay = random.uniform(1, 5)  # nosec B311
         time.sleep(delay)
-
-def mock_s3_failure():
-    if FUZZY_FOR_DEMO and random.random() < 0.1:  # 10% chance of failure
-        raise Exception("Mocked S3 operation failure")
 
 def lambda_handler(event, context):
     try:
@@ -40,9 +36,6 @@ def lambda_handler(event, context):
         object_key = s3_event['object']['key']
 
         print(f"S3 Event - Bucket: {bucket_name}, Object Key: {object_key}")
-
-        # Simulate S3 operation failure
-        mock_s3_failure()
 
         # Prepare input payload for Step Function
         trace_id = os.environ.get("_X_AMZN_TRACE_ID")
