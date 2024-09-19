@@ -10,11 +10,13 @@ from aws_cdk import (
 )
 import yaml
 
+
 def read_yaml_file(file_path):
     with open(file_path, 'r') as file:
         yaml_content = yaml.safe_load(file)
         stringified_yaml = yaml.dump(yaml_content)
     return stringified_yaml
+
 
 class OpenTelemetryAgentECS(Construct):
 
@@ -26,11 +28,12 @@ class OpenTelemetryAgentECS(Construct):
         super().__init__(scope, id, **kwargs)
 
         self._otel_config = ssm.StringParameter(
-            self, "OtelAgentConfiguration", 
+            self, "OtelAgentConfiguration",
             data_type=ssm.ParameterDataType.TEXT,
             description="This parameter hold the configuration for the OpenTelemetry Agent",
             parameter_name="OtelAgentConfiguration",
-            string_value=read_yaml_file("config/otel-agent-config.yaml").replace('AWS_REGION', Aws.REGION)
+            string_value=read_yaml_file(
+                "config/otel-agent-config.yaml").replace('AWS_REGION', Aws.REGION)
         )
 
         self._cluster = ecs.Cluster(self, "Cluster",
@@ -79,7 +82,7 @@ class OpenTelemetryAgentECS(Construct):
             logging=ecs.LogDriver.aws_logs(stream_prefix="otel-agent"),
             secrets={
                 "AOT_CONFIG_CONTENT": ecs.Secret.from_ssm_parameter(
-                    parameter= self._otel_config
+                    parameter=self._otel_config
                 )
             }
         )

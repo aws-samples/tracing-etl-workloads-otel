@@ -1,9 +1,9 @@
 from constructs import Construct
 from aws_cdk import (
-    Stack, 
+    Stack,
     Aspects,
-    IAspect, 
-    RemovalPolicy, 
+    IAspect,
+    RemovalPolicy,
     IResource,
     aws_ec2 as ec2,
 )
@@ -13,6 +13,8 @@ from .data_pipeline import DataPipeline
 
 from constructs import IConstruct
 from jsii import implements
+from lib.suppressions import add_suppressions
+
 
 @implements(IAspect)
 class RemovalPolicyAspect:
@@ -23,7 +25,8 @@ class RemovalPolicyAspect:
             except Exception:
                 # If applying the removal policy fails for any reason, we just skip it
                 pass
-        
+
+
 class OtelSolutionStack(Stack):
 
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
@@ -42,8 +45,11 @@ class OtelSolutionStack(Stack):
         )
 
         # Instantiating the Data Pipeline Service
-        data_pipeline = DataPipeline(self, "DataPipeline", 
+        data_pipeline = DataPipeline(self, "DataPipeline",
                                      vpc=vpc, agent=agent)
 
         # Apply RemovalPolicy.DESTROY to all resources
         Aspects.of(self).add(RemovalPolicyAspect())
+
+        # Adding Suppressions for CDK NAG
+        add_suppressions(self)

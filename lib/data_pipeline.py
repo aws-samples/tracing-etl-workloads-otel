@@ -30,13 +30,13 @@ class DataPipeline(Construct):
         # Creating a bucket to store all ingested files
         # https://www.kaggle.com/datasets/arianazmoudeh/airbnbopendata
 
-        self._ingest_bucket = s3.Bucket(
-            self,
-            "IngestionBucket",
-            auto_delete_objects=True,
-            removal_policy=RemovalPolicy.DESTROY,
-            bucket_name=f"otelsolution-ingest-bucket-{Aws.ACCOUNT_ID}-{Aws.REGION}"
-        )
+        self._ingest_bucket = s3.Bucket(self, "IngestionBucket",
+                                        bucket_name=f"otelsolution-ingest-bucket-{
+                                            Aws.ACCOUNT_ID}-{Aws.REGION}",
+                                        auto_delete_objects=True,
+                                        removal_policy=RemovalPolicy.DESTROY,
+                                        block_public_access=s3.BlockPublicAccess.BLOCK_ALL
+                                        )
 
         # Glue Jobs for Processing Data from the AirBnb Dataset
 
@@ -53,9 +53,11 @@ class DataPipeline(Construct):
                 "Cloud Map service is not enabled for the OpenTelemetry Agent")
 
         # Glue Job Security Group
-        self.glue_security_group = ec2.SecurityGroup(
-            self, "Security Group for AWS Glue", vpc=vpc, allow_all_outbound=True, disable_inline_rules=True)
-
+        self.glue_security_group = ec2.SecurityGroup(self, "SecurityGroupForGlue",
+                                                     vpc=vpc,
+                                                     description="Security group for Glue jobs",
+                                                     allow_all_outbound=True
+                                                     )
         # Add an ingress rule to Glue Security Group that allows all traffic from Agent Security Group
         self.glue_security_group.add_ingress_rule(ec2.Peer.security_group_id(
             self.agent_security_group), ec2.Port.all_traffic())
@@ -118,10 +120,6 @@ class DataPipeline(Construct):
                             actions=["ec2:DescribeSubnets",
                                      "ec2:DescribeSecurityGroups"],
                             resources=['*']
-                        ),
-                        iam.PolicyStatement(
-                            actions=["s3:*"],
-                            resources=["*"]
                         ),
                         iam.PolicyStatement(
                             actions=["kms:Decrypt",
@@ -262,7 +260,8 @@ class DataPipeline(Construct):
                 eventsources.S3EventSource(
                     self._ingest_bucket,
                     events=[s3.EventType.OBJECT_CREATED],
-                    filters=[s3.NotificationKeyFilter(prefix="input/", suffix="csv")]
+                    filters=[s3.NotificationKeyFilter(
+                        prefix="input/", suffix="csv")]
                 )
             ],
             timeout=Duration.seconds(60),
