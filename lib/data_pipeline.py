@@ -1,3 +1,6 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 from constructs import Construct
 
 from lib.agent_service import OpenTelemetryAgentECS
@@ -30,14 +33,12 @@ class DataPipeline(Construct):
         # Creating a bucket to store all ingested files
         # https://www.kaggle.com/datasets/arianazmoudeh/airbnbopendata
 
-        self._ingest_bucket = s3.Bucket(
-            self,
-            "IngestionBucket",
-            auto_delete_objects=True,
-            removal_policy=RemovalPolicy.DESTROY,
-            bucket_name=f"otelsolution-ingest-bucket-{
-                Aws.ACCOUNT_ID}-{Aws.REGION}"
-        )
+        self._ingest_bucket = s3.Bucket(self,
+        "IngestionBucket",
+        auto_delete_objects=True,
+        removal_policy=RemovalPolicy.DESTROY,
+        bucket_name=f"otelsolution-ingest-bucket-{
+            Aws.ACCOUNT_ID}-{Aws.REGION}", enforce_ssl=True)
 
         # Glue Jobs for Processing Data from the AirBnb Dataset
 
